@@ -1,0 +1,28 @@
+{
+  "name": "wgpu_radix_sort",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jaesung-cs/wgpu_radix_sort.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/jaesung-cs/wgpu_radix_sort/issues"
+  },
+  "homepage": "https://github.com/jaesung-cs/wgpu_radix_sort#readme",
+  "devDependencies": {
+    "@types/node": "^22.15.30",
+    "@webgpu/types": "^0.1.61",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
+  }
+}
