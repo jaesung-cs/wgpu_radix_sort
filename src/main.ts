@@ -1,5 +1,26 @@
 import { WrdxSorter } from './wgpu_sorter';
 
+function arraysEqual(a: Uint32Array, b: Uint32Array) {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; ++i) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+function Uint32ArrayRandom(N: number) {
+  const chunkSize = 16384;
+  const result = new Uint32Array(N);
+
+  for (let offset = 0; offset < N; offset += chunkSize) {
+    const count = Math.min(chunkSize, N - offset);
+    const slice = new Uint32Array(result.buffer, offset * 4, count);
+    crypto.getRandomValues(slice);
+  }
+
+  return result;
+}
+
 export default async function start() {
   const adapter = await navigator.gpu.requestAdapter();
   const features = adapter!.features;
@@ -15,11 +36,11 @@ export default async function start() {
   console.log("Adaptor:", adapter);
   console.log("Device:", device);
 
-  const wrdxSorter = new WrdxSorter(device);
+  const MAX_N = 1048576;
+  const wrdxSorter = new WrdxSorter(device, MAX_N);
 
-  const N = 10;
-  const data = new Uint32Array(N);
-  crypto.getRandomValues(data);
+  const N = 1048576;
+  const data = Uint32ArrayRandom(N);
 
   console.log("sorting: ", data);
 
@@ -36,8 +57,14 @@ export default async function start() {
 
   await stage.mapAsync(GPUMapMode.READ);
   const keysArray = new Uint32Array(stage.getMappedRange());
-  console.log("keys:", keysArray);
-  console.log("ans :", data.sort());
+
+  const result = arraysEqual(keysArray, data.slice().sort());
+  console.log("result: ", result);
+  if (!result) {
+    console.log("keys:", keysArray);
+    console.log("ans :", data.slice().sort());
+  }
+
   stage.unmap();
 
   keys.destroy();

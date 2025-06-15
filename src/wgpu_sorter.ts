@@ -25,7 +25,7 @@ export class WrdxSorter {
   private storage: GPUBuffer;
   private sortPass: GPUBuffer;
 
-  constructor(private readonly device: GPUDevice) {
+  constructor(private readonly device: GPUDevice, elementCount: number) {
     const upsweepShaderModule = device.createShaderModule({ code: upsweepShaderCode });
     const spineShaderModule = device.createShaderModule({ code: spineShaderCode });
     const downsweepShaderModule = device.createShaderModule({ code: downsweepShaderCode });
@@ -91,9 +91,9 @@ export class WrdxSorter {
     });
 
     this.elementCounts = device.createBuffer({ size: 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
-    this.globalHistogram = device.createBuffer({ size: 4096 * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
-    this.partitionHistogram = device.createBuffer({ size: 4096 * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
-    this.storage = device.createBuffer({ size: 4096 * 4, usage: GPUBufferUsage.STORAGE });
+    this.globalHistogram = device.createBuffer({ size: 4 * RADIX * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+    this.partitionHistogram = device.createBuffer({ size: RoundUp(elementCount, PARTITION_SIZE) * RADIX * 4, usage: GPUBufferUsage.STORAGE });
+    this.storage = device.createBuffer({ size: elementCount * 4, usage: GPUBufferUsage.STORAGE });
     this.sortPass = device.createBuffer({ size: 4, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
   }
 
@@ -109,7 +109,7 @@ export class WrdxSorter {
     const device = this.device;
 
     const storageBindGroup0 = device.createBindGroup({
-      layout: this.storageBindGroupLayout!,
+      layout: this.storageBindGroupLayout,
       entries: [{
         binding: 0,
         resource: { buffer: this.elementCounts },
@@ -129,7 +129,7 @@ export class WrdxSorter {
     });
 
     const storageBindGroup1 = device.createBindGroup({
-      layout: this.storageBindGroupLayout!,
+      layout: this.storageBindGroupLayout,
       entries: [{
         binding: 0,
         resource: { buffer: this.elementCounts },
@@ -151,7 +151,7 @@ export class WrdxSorter {
     const storageBindGroups = [storageBindGroup0, storageBindGroup1];
 
     const uniformBindGroup = device.createBindGroup({
-      layout: this.uniformBindGroupLayout!,
+      layout: this.uniformBindGroupLayout,
       entries: [{
         binding: 0,
         resource: { buffer: this.sortPass },
@@ -164,15 +164,14 @@ export class WrdxSorter {
     const partitionCount = RoundUp(elementCount, PARTITION_SIZE);
 
     for (let pass = 0; pass < 4; pass++) {
-      let data = new Uint32Array(4096);
-      device.queue.writeBuffer(this.globalHistogram, 0, data.buffer, data.byteOffset, data.byteLength);
-      device.queue.writeBuffer(this.partitionHistogram, 0, data.buffer, data.byteOffset, data.byteLength);
-      data = new Uint32Array([pass]);
+      let data = new Uint32Array([pass]);
       device.queue.writeBuffer(this.sortPass, 0, data.buffer, data.byteOffset, data.byteLength);
 
       const storageBindGroup = storageBindGroups[pass % 2];
 
       const encoder = device.createCommandEncoder();
+      encoder.clearBuffer(this.globalHistogram, RADIX * pass * 4, RADIX * 4);
+
       const upsweepPass = encoder.beginComputePass();
       upsweepPass.setPipeline(this.upsweepPipeline);
       upsweepPass.setBindGroup(0, storageBindGroup);
