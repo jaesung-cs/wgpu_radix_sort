@@ -1,5 +1,6 @@
 import upsweepShaderCode from './shader/upsweep.wgsl?raw';
 import spineShaderCode from './shader/spine.wgsl?raw';
+import downsweepShaderCode from './shader/downsweep.wgsl?raw';
 
 const RADIX = 256;
 
@@ -26,13 +27,19 @@ export default async function start() {
   console.log("spine shader module:", spineShaderModule);
   console.log(await spineShaderModule.getCompilationInfo());
 
+  const downsweepShaderModule = device.createShaderModule({ code: downsweepShaderCode });
+  console.log("downsweep shader module:", downsweepShaderModule);
+  console.log(await downsweepShaderModule.getCompilationInfo());
+
   const elementCounts = device.createBuffer({ size: 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
   const globalHistogram = device.createBuffer({ size: 4096 * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC });
   const partitionHistogram = device.createBuffer({ size: 4096 * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC });
   const keys = device.createBuffer({ size: 4 * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+  const keysOut = device.createBuffer({ size: 4 * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
   const sortPass = device.createBuffer({ size: 4, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
 
   let data = new Uint32Array([0, 1, 3, 1]);
+  console.log("sorting: ", data);
   device.queue.writeBuffer(keys, 0, data.buffer, data.byteOffset, data.byteLength);
   data = new Uint32Array([4]);
   device.queue.writeBuffer(elementCounts, 0, data.buffer, data.byteOffset, data.byteLength);
@@ -59,6 +66,10 @@ export default async function start() {
       binding: 3,
       visibility: GPUShaderStage.COMPUTE,
       buffer: { type: "read-only-storage" },
+    }, {
+      binding: 4,
+      visibility: GPUShaderStage.COMPUTE,
+      buffer: { type: "storage" },
     }],
   });
 
@@ -90,6 +101,14 @@ export default async function start() {
     }
   });
 
+  const downsweepPipeline = device.createComputePipeline({
+    layout: pipelineLayout,
+    compute: {
+      module: downsweepShaderModule,
+      entryPoint: "main"
+    }
+  });
+
   const storageBindGroup = device.createBindGroup({
     layout: storageBindGroupLayout,
     entries: [{
@@ -104,6 +123,9 @@ export default async function start() {
     }, {
       binding: 3,
       resource: { buffer: keys },
+    }, {
+      binding: 4,
+      resource: { buffer: keysOut },
     }]
   });
 
@@ -130,10 +152,18 @@ export default async function start() {
   spinePass.dispatchWorkgroups(RADIX);
   spinePass.end();
 
+  const downsweepPass = encoder.beginComputePass();
+  downsweepPass.setPipeline(downsweepPipeline);
+  downsweepPass.setBindGroup(0, storageBindGroup);
+  downsweepPass.setBindGroup(1, uniformBindGroup);
+  downsweepPass.dispatchWorkgroups(1);
+  downsweepPass.end();
+
   device.queue.submit([encoder.finish()]);
 
   const stage0 = device.createBuffer({ size: 4096 * 4, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
   const stage1 = device.createBuffer({ size: 4096 * 4, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
+  const stage2 = device.createBuffer({ size: 4 * 4, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
 
   const commandEncoder = device.createCommandEncoder();
   commandEncoder.copyBufferToBuffer(
@@ -146,6 +176,11 @@ export default async function start() {
     stage1, 0,
     4096 * 4
   );
+  commandEncoder.copyBufferToBuffer(
+    keysOut, 0,
+    stage2, 0,
+    4 * 4
+  );
   const commandBuffer = commandEncoder.finish();
   device.queue.submit([commandBuffer]);
 
@@ -153,8 +188,12 @@ export default async function start() {
   const globalHistogramArray = new Uint32Array(stage0.getMappedRange());
   await stage1.mapAsync(GPUMapMode.READ);
   const partitionHistogramArray = new Uint32Array(stage1.getMappedRange());
+  await stage2.mapAsync(GPUMapMode.READ);
+  const keysOutArray = new Uint32Array(stage2.getMappedRange());
   console.log("globalHistogram   :", globalHistogramArray);
   console.log("partitionHistogram:", partitionHistogramArray);
+  console.log("keysOut           :", keysOutArray);
   stage0.unmap();
   stage1.unmap();
+  stage2.unmap();
 }
