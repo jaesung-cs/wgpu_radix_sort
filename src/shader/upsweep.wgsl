@@ -30,9 +30,7 @@ fn main(
         return;
     }
 
-    if index < RADIX {
-        atomicStore(&localHistogram[index], 0);
-    }
+    atomicStore(&localHistogram[index], 0);
     workgroupBarrier();
   
     // local histogram
@@ -44,12 +42,10 @@ fn main(
     }
     workgroupBarrier();
 
-    if index < RADIX {
-        // set to partition histogram
-        let v = atomicLoad(&localHistogram[index]);
-        partitionHistogram[RADIX * partitionIndex + index] = v;
+    // set to partition histogram
+    let v = atomicLoad(&localHistogram[index]);
+    partitionHistogram[RADIX * partitionIndex + index] = v;
 
-        // add to global histogram
-        atomicAdd(&globalHistogram[RADIX * sortPass + index], v);
-    }
+    // add to global histogram
+    atomicAdd(&globalHistogram[RADIX * sortPass + index], v);
 }

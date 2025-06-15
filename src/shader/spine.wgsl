@@ -28,9 +28,9 @@ fn main(
 ) {
     let elementCount = elementCounts[0];
 
-    let waveIndex = groupIndex / laneCount;
-    let waveCount = WORKGROUP_SIZE / laneCount;
-    let index = waveIndex * laneCount + laneIndex;
+    let waveIndex = groupIndex / laneCount;         // 0..7
+    let waveCount = WORKGROUP_SIZE / laneCount;     // 8
+    let index = waveIndex * laneCount + laneIndex;  // 0..255
 
     let radix = groupId.x;
 
@@ -43,7 +43,7 @@ fn main(
 
     for (var i = 0u; WORKGROUP_SIZE * i < partitionCount; i++) {
         let partitionIndex = WORKGROUP_SIZE * i + index;
-        let value = select(0, partitionHistogram[RADIX * partitionIndex + radix], partitionIndex < partitionCount);
+        let value = select(0, partitionHistogram[RADIX * (partitionIndex % partitionCount) + radix], partitionIndex < partitionCount);
         var excl = subgroupExclusiveAdd(value) + reduction;
         let sum = subgroupAdd(value);
 
@@ -53,8 +53,9 @@ fn main(
         workgroupBarrier();
 
             {
-            let excl = subgroupExclusiveAdd(intermediate[index % MAX_SUBGROUP_SIZE]);
-            let sum = subgroupAdd(intermediate[index % MAX_SUBGROUP_SIZE]);
+            let value = select(0, intermediate[index % MAX_SUBGROUP_SIZE], index < waveCount);
+            let excl = subgroupExclusiveAdd(value);
+            let sum = subgroupAdd(value);
             if index < waveCount {
                 intermediate[index] = excl;
 
@@ -74,7 +75,7 @@ fn main(
 
     if radix == 0 {
         // one workgroup is responsible for global histogram prefix sum
-        let value = globalHistogram[RADIX * sortPass + (index % RADIX)];
+        let value = globalHistogram[RADIX * sortPass + index];
         var excl = subgroupExclusiveAdd(value);
         let sum = subgroupAdd(value);
 

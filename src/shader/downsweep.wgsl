@@ -16,7 +16,7 @@ const MAX_SUBGROUP_SIZE = 128u;
 
 @binding(0) @group(1) var<uniform> sortPass: u32;
 
-var<workgroup> localHistogram: array<atomic<u32>, PARTITION_SIZE>;  // (R, S=16)=4096, (P) for alias. take maximum.
+var<workgroup> localHistogram: array<atomic<u32>, PARTITION_SIZE>;  // (R, S=8)=2048, (P) for alias. take maximum.
 var<workgroup> localHistogramSum: array<u32, RADIX>;
 
 // returns 0b00000....11111, where msb is id-1.
@@ -41,16 +41,15 @@ fn GetBitCount(value: vec4<u32>) -> u32 {
 @compute
 @workgroup_size(WORKGROUP_SIZE, 1, 1)
 fn main(
-    @builtin(local_invocation_id) groupThreadID: vec3<u32>,
-    @builtin(workgroup_id) groupId: vec3<u32>,
-    @builtin(local_invocation_index) groupIndex: u32,
-    @builtin(subgroup_invocation_id) laneIndex: u32,  // 0..31 or 0..63
-    @builtin(subgroup_size) laneCount: u32,           // 32 or 64
+    @builtin(workgroup_id) groupId: vec3<u32>,               // 0..P-1
+    @builtin(local_invocation_index) groupIndex: u32,        // 0..W-1
+    @builtin(subgroup_invocation_id) laneIndex: u32,         // 0..31 or 0..63
+    @builtin(subgroup_size) laneCount: u32,                  // 32 or 64
 ) {
     let elementCount = elementCounts[0];
 
-    let waveIndex = groupIndex / laneCount;         // 0..15 or 0..7
-    let waveCount = WORKGROUP_SIZE / laneCount;     // 16 or 8
+    let waveIndex = groupIndex / laneCount;         // 0..7 or 0..3
+    let waveCount = WORKGROUP_SIZE / laneCount;     // 8 or 4
     let index = waveIndex * laneCount + laneIndex;  // 0..255
 
     let waveMask: vec4<u32> = GetExclusiveWaveMask(laneIndex);
@@ -62,10 +61,8 @@ fn main(
         return;
     }
 
-    if index < RADIX {
-        for (var i = 0u; i < waveCount; i++) {
-            atomicStore(&localHistogram[waveCount * index + i], 0);
-        }
+    for (var i = 0u; i < waveCount; i++) {
+        atomicStore(&localHistogram[waveCount * index + i], 0);
     }
     workgroupBarrier();
 
@@ -109,7 +106,7 @@ fn main(
     }
     workgroupBarrier();
 
-    // local histogram reduce 4096 or 2048
+    // local histogram reduce 2048 or 1024
     for (var i = 0u; i < waveCount; i++) {
         let id = index + i * WORKGROUP_SIZE;
         let v = atomicLoad(&localHistogram[id]);
@@ -122,22 +119,22 @@ fn main(
     }
     workgroupBarrier();
     
-    // local histogram reduce 128 or 32
+    // local histogram reduce 64 or 16
     let intermediateOffset0 = RADIX * waveCount / laneCount;
         {
-        let v = localHistogramSum[index % intermediateOffset0];
+        let v = select(0, localHistogramSum[index], index < intermediateOffset0);
         let sum = subgroupAdd(v);
         let excl = subgroupExclusiveAdd(v);
         if index < intermediateOffset0 {
             localHistogramSum[index] = excl;
         }
-        if laneIndex == 0 {
+        if index < intermediateOffset0 && laneIndex == 0 {
             localHistogramSum[intermediateOffset0 + index / laneCount] = sum;
         }
     }
     workgroupBarrier();
     
-    // local histogram reduce 4 or 1
+    // local histogram reduce 2 or 1
     let intermediateSize1 = max(RADIX * waveCount / laneCount / laneCount, 1);
         {
         let v = localHistogramSum[(intermediateOffset0 + index) % RADIX];
@@ -148,13 +145,13 @@ fn main(
     }
     workgroupBarrier();
     
-    // local histogram add 128
+    // local histogram add 128 or 32
     if index < intermediateOffset0 {
         localHistogramSum[index] += localHistogramSum[intermediateOffset0 + index / laneCount];
     }
     workgroupBarrier();
     
-    // local histogram add 4096
+    // local histogram add 2048 or 1024
     for (var i = index; i < RADIX * waveCount; i += WORKGROUP_SIZE) {
         atomicAdd(&localHistogram[i], localHistogramSum[i / laneCount]);
     }
@@ -173,7 +170,7 @@ fn main(
     }
     
     // after atomicAdd, localHistogram contains inclusive sum
-    if index < RADIX {
+        {
         let v = select(atomicLoad(&localHistogram[waveCount * index - 1]), 0, index == 0);
         localHistogramSum[index] = globalHistogram[RADIX * sortPass + index] + partitionHistogram[RADIX * partitionIndex + index] - v;
     }
