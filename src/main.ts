@@ -23,6 +23,7 @@ function Uint32ArrayRandom(N: number) {
 
 async function testSortKeys(device: GPUDevice, sorter: WrdxSorter, keys: Uint32Array) {
   const N = keys.length;
+  console.log(`test sort keys ${N}`);
 
   const keysBuffer = device.createBuffer({ size: keys.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC });
   device.queue.writeBuffer(keysBuffer, 0, keys.buffer, keys.byteOffset, keys.byteLength);
@@ -51,6 +52,53 @@ async function testSortKeys(device: GPUDevice, sorter: WrdxSorter, keys: Uint32A
   stage.destroy();
 }
 
+async function testSortKeyValues(device: GPUDevice, sorter: WrdxSorter, keys: Uint32Array, values: Uint32Array) {
+  const N = keys.length;
+  console.log(`test sort key values ${N}`);
+
+  const keysBuffer = device.createBuffer({ size: keys.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC });
+  const valuesBuffer = device.createBuffer({ size: keys.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC });
+  device.queue.writeBuffer(keysBuffer, 0, keys.buffer, keys.byteOffset, keys.byteLength);
+  device.queue.writeBuffer(valuesBuffer, 0, values.buffer, values.byteOffset, values.byteLength);
+
+  sorter.sortKeyValues(N, keysBuffer, valuesBuffer);
+
+  const stage = device.createBuffer({ size: keysBuffer.size * 2, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
+  const commandEncoder = device.createCommandEncoder();
+  commandEncoder.copyBufferToBuffer(keysBuffer, 0, stage, 0, keysBuffer.size);
+  commandEncoder.copyBufferToBuffer(valuesBuffer, 0, stage, keysBuffer.size, valuesBuffer.size);
+  const commandBuffer = commandEncoder.finish();
+  device.queue.submit([commandBuffer]);
+
+  await stage.mapAsync(GPUMapMode.READ);
+  const keysArray = new Uint32Array(stage.getMappedRange(0, keysBuffer.size));
+  const valuesArray = new Uint32Array(stage.getMappedRange(keysBuffer.size, valuesBuffer.size));
+
+  const indices = Uint32Array.from(keys.keys());
+  indices.sort((i, j) => keys[i] - keys[j]);
+  const sortedKeys = new Uint32Array(indices.map(i => keys[i]));
+  const sortedValues = new Uint32Array(indices.map(i => values[i]));
+
+  const resultKeys = arraysEqual(keysArray, sortedKeys);
+  console.log("result (keys): ", resultKeys);
+  if (!resultKeys) {
+    console.log("keys:", keysArray);
+    console.log("ans :", sortedKeys);
+  }
+  const resultValues = arraysEqual(valuesArray, sortedValues);
+  console.log("result (vals): ", resultValues);
+  if (!resultValues) {
+    console.log("vals:", valuesArray);
+    console.log("ans :", sortedValues);
+  }
+
+  stage.unmap();
+
+  keysBuffer.destroy();
+  valuesBuffer.destroy();
+  stage.destroy();
+}
+
 export default async function start() {
   const adapter = await navigator.gpu.requestAdapter();
   const features = adapter!.features;
@@ -72,7 +120,12 @@ export default async function start() {
   {
     const N = 1048576;
     const keys = Uint32ArrayRandom(N);
-    console.log("sorting: ", keys);
-    testSortKeys(device, wrdxSorter, keys);
+    await testSortKeys(device, wrdxSorter, keys);
+  }
+  {
+    const N = 1048576;
+    const keys = Uint32ArrayRandom(N);
+    const values = Uint32ArrayRandom(N);
+    await testSortKeyValues(device, wrdxSorter, keys, values);
   }
 }

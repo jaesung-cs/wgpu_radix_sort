@@ -203,4 +203,9 @@ export class WrdxSorter {
       device.queue.submit([encoder.finish()]);
     }
   }
+
+  sortKeyValues(elementCount: number, keys: GPUBuffer, values: GPUBuffer) {
+    // TODO: implement.
+    this.sort(elementCount, keys);
+  }
 };
