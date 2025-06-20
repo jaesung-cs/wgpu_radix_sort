@@ -4,12 +4,13 @@ const PARTITION_DIVISION = 8;
 const PARTITION_SIZE = PARTITION_DIVISION * WORKGROUP_SIZE;
 const MAX_SUBGROUP_SIZE = 128;
 
-@binding(0) @group(0) var<storage, read> elementCounts: array<u32>;
-@binding(1) @group(0) var<storage, read_write> globalHistogram: array<atomic<u32>>;
-@binding(2) @group(0) var<storage, read_write> partitionHistogram: array<u32>;
-@binding(3) @group(0) var<storage, read> keys: array<u32>;
+@group(0) @binding(0) var<storage, read> elementCounts: array<u32>;
+@group(0) @binding(1) var<storage, read_write> globalHistogram: array<atomic<u32>>;
+@group(0) @binding(2) var<storage, read_write> partitionHistogram: array<u32>;
 
-@binding(0) @group(1) var<uniform> sortPass: u32;
+@group(1) @binding(0) var<storage, read> keys: array<u32>;
+
+@group(2) @binding(0) var<uniform> sortPass: u32;
 
 var<workgroup> localHistogram: array<atomic<u32>, RADIX>;
 

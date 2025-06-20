@@ -7,14 +7,15 @@ const PARTITION_DIVISION = 8u;
 const PARTITION_SIZE = PARTITION_DIVISION * WORKGROUP_SIZE;
 const MAX_SUBGROUP_SIZE = 128u;
 
-@binding(0) @group(0) var<storage, read> elementCounts: array<u32>;
+@group(0) @binding(0) var<storage, read> elementCounts: array<u32>;
 // TODO: read_write for pipeline layout. change to read.
-@binding(1) @group(0) var<storage, read_write> globalHistogram: array<u32>;
-@binding(2) @group(0) var<storage, read_write> partitionHistogram: array<u32>;
-@binding(3) @group(0) var<storage, read> keysIn: array<u32>;
-@binding(4) @group(0) var<storage, read_write> keysOut: array<u32>;
+@group(0) @binding(1) var<storage, read_write> globalHistogram: array<u32>;
+@group(0) @binding(2) var<storage, read_write> partitionHistogram: array<u32>;
 
-@binding(0) @group(1) var<uniform> sortPass: u32;
+@group(1) @binding(0) var<storage, read> keysIn: array<u32>;
+@group(1) @binding(1) var<storage, read_write> keysOut: array<u32>;
+
+@group(2) @binding(0) var<uniform> sortPass: u32;
 
 var<workgroup> localHistogram: array<atomic<u32>, PARTITION_SIZE>;  // (R, S=8)=2048, (P) for alias. take maximum.
 var<workgroup> localHistogramSum: array<u32, RADIX>;
