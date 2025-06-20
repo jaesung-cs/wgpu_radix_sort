@@ -28,7 +28,7 @@ async function testSortKeys(device: GPUDevice, sorter: WrdxSorter, keys: Uint32A
   const keysBuffer = device.createBuffer({ size: keys.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC });
   device.queue.writeBuffer(keysBuffer, 0, keys.buffer, keys.byteOffset, keys.byteLength);
 
-  sorter.sort(N, keysBuffer);
+  sorter.sortKeys(N, keysBuffer);
 
   const stage = device.createBuffer({ size: keysBuffer.size, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
   const commandEncoder = device.createCommandEncoder();

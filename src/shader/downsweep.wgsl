@@ -14,6 +14,10 @@ const MAX_SUBGROUP_SIZE = 128u;
 
 @group(1) @binding(0) var<storage, read> keysIn: array<u32>;
 @group(1) @binding(1) var<storage, read_write> keysOut: array<u32>;
+#ifdef KEY_VALUE
+@group(1) @binding(2) var<storage, read> valuesIn: array<u32>;
+@group(1) @binding(3) var<storage, read_write> valuesOut: array<u32>;
+#endif  // KEY_VALUE
 
 @group(2) @binding(0) var<uniform> sortPass: u32;
 
@@ -72,11 +76,18 @@ fn main(
     var localRadix: array<u32, PARTITION_DIVISION>;
     var localOffsets: array<u32, PARTITION_DIVISION>;
     var waveHistogram: array<u32, PARTITION_DIVISION>;
+#ifdef KEY_VALUE
+    var localValues: array<u32, PARTITION_DIVISION>;
+#endif  // KEY_VALUE
 
     for (var i = 0u; i < PARTITION_DIVISION; i++) {
         let keyIndex = partitionStart + (PARTITION_DIVISION * laneCount) * waveIndex + i * laneCount + laneIndex;
         let key = select(0xffffffffu, keysIn[keyIndex], keyIndex < elementCount);
         localKeys[i] = key;
+
+#ifdef KEY_VALUE
+        localValues[i] = select(0, valuesIn[keyIndex], keyIndex < elementCount);
+#endif  // KEY_VALUE
 
         let radix = extractBits(key, sortPass * 8, 8);
         localRadix[i] = radix;
@@ -193,5 +204,27 @@ fn main(
         if dstOffset < elementCount {
             keysOut[dstOffset] = key;
         }
+        
+#ifdef KEY_VALUE
+        localKeys[i / WORKGROUP_SIZE] = dstOffset;
+#endif  // KEY_VALUE
     }
+    
+#ifdef KEY_VALUE
+    workgroupBarrier();
+
+    for (var i = 0u; i < PARTITION_DIVISION; i++) {
+        let offset = localOffsets[i];
+        atomicStore(&localHistogram[offset], localValues[i]);
+    }
+    workgroupBarrier();
+
+    for (var i = index; i < PARTITION_SIZE; i += WORKGROUP_SIZE) {
+        let value = atomicLoad(&localHistogram[i]);
+        let dstOffset = localKeys[i / WORKGROUP_SIZE];
+        if dstOffset < elementCount {
+            valuesOut[dstOffset] = value;
+        }
+    }
+#endif  // KEY_VALUE
 }
