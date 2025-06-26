@@ -178,12 +178,31 @@ export class WrdxSorter {
     this.sortImpl(elementCount, keys, undefined);
   }
 
+  sortKeysIndirect(elementCount: GPUBuffer, keys: GPUBuffer) {
+    this.sortImpl(elementCount, keys, undefined);
+  }
+
   sortKeyValues(elementCount: number, keys: GPUBuffer, values: GPUBuffer) {
     this.sortImpl(elementCount, keys, values);
   }
 
-  private sortImpl(elementCount: number, keys: GPUBuffer, values: GPUBuffer | undefined) {
+  sortKeyValuesIndirect(elementCount: GPUBuffer, keys: GPUBuffer, values: GPUBuffer) {
+    this.sortImpl(elementCount, keys, values);
+  }
+
+  private sortImpl(elementCount: GPUBuffer | number, keys: GPUBuffer, values: GPUBuffer | undefined) {
     const device = this.device;
+
+    let partitionCount = roundUp(this.maxElementCount, PARTITION_SIZE);
+    if (elementCount instanceof GPUBuffer) {
+      const encoder = device.createCommandEncoder();
+      encoder.copyBufferToBuffer(elementCount, this.elementCounts, 4);
+      device.queue.submit([encoder.finish()]);
+    } else {
+      partitionCount = roundUp(elementCount, PARTITION_SIZE)
+      const data = new Uint32Array([elementCount]);
+      device.queue.writeBuffer(this.elementCounts, 0, data.buffer, data.byteOffset, data.byteLength);
+    }
 
     let downsweepPipeline: GPUComputePipeline;
     if (values === undefined) {
@@ -214,11 +233,6 @@ export class WrdxSorter {
     });
 
     const inoutBindGroups = [inoutBindGroup0, inoutBindGroup1];
-
-    const data = new Uint32Array([elementCount]);
-    device.queue.writeBuffer(this.elementCounts, 0, data.buffer, data.byteOffset, data.byteLength);
-
-    const partitionCount = roundUp(elementCount, PARTITION_SIZE);
 
     for (let pass = 0; pass < 4; pass++) {
       const data = new Uint32Array([pass]);

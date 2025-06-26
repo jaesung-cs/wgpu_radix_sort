@@ -21,14 +21,23 @@ function Uint32ArrayRandom(N: number) {
   return result;
 }
 
-async function testSortKeys(device: GPUDevice, sorter: WrdxSorter, keys: Uint32Array) {
+async function testSortKeys(device: GPUDevice, sorter: WrdxSorter, keys: Uint32Array, indirect: boolean = false) {
   const N = keys.length;
-  console.log(`test sort keys ${N}`);
 
   const keysBuffer = device.createBuffer({ size: keys.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC });
   device.queue.writeBuffer(keysBuffer, 0, keys.buffer, keys.byteOffset, keys.byteLength);
 
-  sorter.sortKeys(N, keysBuffer);
+  let elementCount: GPUBuffer | undefined = undefined;
+  if (indirect) {
+    console.log(`test sort keys indirect ${N}`);
+    const data = new Uint32Array([N]);
+    elementCount = device.createBuffer({ size: data.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST });
+    device.queue.writeBuffer(elementCount, 0, data.buffer, data.byteOffset, data.byteLength);
+    sorter.sortKeysIndirect(elementCount, keysBuffer);
+  } else {
+    console.log(`test sort keys ${N}`);
+    sorter.sortKeys(N, keysBuffer);
+  }
 
   const stage = device.createBuffer({ size: keysBuffer.size, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
   const commandEncoder = device.createCommandEncoder();
@@ -50,18 +59,28 @@ async function testSortKeys(device: GPUDevice, sorter: WrdxSorter, keys: Uint32A
 
   keysBuffer.destroy();
   stage.destroy();
+  if (elementCount) elementCount.destroy();
 }
 
-async function testSortKeyValues(device: GPUDevice, sorter: WrdxSorter, keys: Uint32Array, values: Uint32Array) {
+async function testSortKeyValues(device: GPUDevice, sorter: WrdxSorter, keys: Uint32Array, values: Uint32Array, indirect: boolean = false) {
   const N = keys.length;
-  console.log(`test sort key values ${N}`);
 
   const keysBuffer = device.createBuffer({ size: keys.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC });
   const valuesBuffer = device.createBuffer({ size: keys.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC });
   device.queue.writeBuffer(keysBuffer, 0, keys.buffer, keys.byteOffset, keys.byteLength);
   device.queue.writeBuffer(valuesBuffer, 0, values.buffer, values.byteOffset, values.byteLength);
 
-  sorter.sortKeyValues(N, keysBuffer, valuesBuffer);
+  let elementCount: GPUBuffer | undefined = undefined;
+  if (indirect) {
+    console.log(`test sort key values indirect ${N}`);
+    const data = new Uint32Array([N]);
+    elementCount = device.createBuffer({ size: data.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST });
+    device.queue.writeBuffer(elementCount, 0, data.buffer, data.byteOffset, data.byteLength);
+    sorter.sortKeyValuesIndirect(N, keysBuffer, valuesBuffer);
+  } else {
+    console.log(`test sort key values ${N}`);
+    sorter.sortKeyValues(N, keysBuffer, valuesBuffer);
+  }
 
   const stage = device.createBuffer({ size: keysBuffer.size * 2, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
   const commandEncoder = device.createCommandEncoder();
@@ -97,6 +116,7 @@ async function testSortKeyValues(device: GPUDevice, sorter: WrdxSorter, keys: Ui
   keysBuffer.destroy();
   valuesBuffer.destroy();
   stage.destroy();
+  if (elementCount) elementCount.destroy();
 }
 
 export default async function start() {
@@ -127,5 +147,18 @@ export default async function start() {
     const keys = Uint32ArrayRandom(N);
     const values = Uint32ArrayRandom(N);
     await testSortKeyValues(device, wrdxSorter, keys, values);
+  }
+
+  // sort indirect
+  {
+    const N = 1048576;
+    const keys = Uint32ArrayRandom(N);
+    await testSortKeys(device, wrdxSorter, keys, true);
+  }
+  {
+    const N = 1048576;
+    const keys = Uint32ArrayRandom(N);
+    const values = Uint32ArrayRandom(N);
+    await testSortKeyValues(device, wrdxSorter, keys, values, true);
   }
 }
