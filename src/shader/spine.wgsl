@@ -18,7 +18,7 @@ var<workgroup> intermediate: array<u32, MAX_SUBGROUP_SIZE>;
 
 // dispatch this shader (RADIX, 1, 1), so that gl_WorkGroupID.x is radix
 @compute
-@workgroup_size(WORKGROUP_SIZE, 1, 1)
+@workgroup_size(WORKGROUP_SIZE)
 fn main(
     @builtin(local_invocation_id) groupThreadID: vec3<u32>,
     @builtin(workgroup_id) groupId: vec3<u32>,

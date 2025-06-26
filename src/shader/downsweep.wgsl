@@ -44,7 +44,7 @@ fn GetBitCount(value: vec4<u32>) -> u32 {
 }
 
 @compute
-@workgroup_size(WORKGROUP_SIZE, 1, 1)
+@workgroup_size(WORKGROUP_SIZE)
 fn main(
     @builtin(workgroup_id) groupId: vec3<u32>,               // 0..P-1
     @builtin(local_invocation_index) groupIndex: u32,        // 0..W-1

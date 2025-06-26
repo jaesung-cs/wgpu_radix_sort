@@ -188,7 +188,7 @@ export class WrdxSorter {
     let downsweepPipeline: GPUComputePipeline;
     if (values === undefined) {
       values = this.dummy;
-      downsweepPipeline = this.downsweepPipeline
+      downsweepPipeline = this.downsweepPipeline;
     } else {
       downsweepPipeline = this.downsweepKeyValuePipeline;
     }

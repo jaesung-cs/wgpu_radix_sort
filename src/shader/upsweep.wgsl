@@ -15,7 +15,7 @@ const MAX_SUBGROUP_SIZE = 128;
 var<workgroup> localHistogram: array<atomic<u32>, RADIX>;
 
 @compute
-@workgroup_size(WORKGROUP_SIZE, 1, 1)
+@workgroup_size(WORKGROUP_SIZE)
 fn main(
     @builtin(local_invocation_id) groupThreadID: vec3<u32>,
     @builtin(workgroup_id) groupId: vec3<u32>,
